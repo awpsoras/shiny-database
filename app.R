@@ -6,55 +6,55 @@
 #
 #    https://shiny.posit.co/
 #
+# https://yihui.shinyapps.io/DT-edit/
+# https://shiny.posit.co/r/gallery/widgets/datatables-options/ 
 
 library(shiny)
 library(DT)
 library(tidyverse)
+library(here)
 
 display_pan <- tabPanel(
   title = "Viewing the Data",
   p("Here we will be testing useful ways of displaying data. Eventually we will work in databases as well."),
-  
-  wellPanel(
-    selectInput('otherselection', 'Select cols', choices = '', multiple = TRUE),
-  ),
-  column(
-    6,
-    wellPanel(
-      "Use this box to see unique vals of a certain column (helpful for searching)",
-      selectInput('uniquecol', label = "", choices = ""),
-      textOutput('options')
+  fluidRow(
+    column(
+      6,
+      wellPanel(
+        "Use this box to select which columns are visible.",
+        selectInput('selection', '', choices = '', multiple = TRUE))
+    ),
+    column(
+      6,
+      wellPanel(
+        "Use this box to see unique vals of a certain column (helpful for searching).",
+        selectInput('uniquecol', label = "", choices = ""),
+        textOutput('options', inline = TRUE)
+      )
     )
-  ),
-  column (
-    6,
-    wellPanel(
-      "Use this box to filter based on a specified column (more specific than the search box)",
-      selectInput('filtercol', label = "Column to filter", choices = ''),
-      textInput('filterval', label = "Value to search for")
-    )
-  ),
-  
-  br(),
-  
-  #wellPanel(DTOutput('df')),
+  )
+  ,
+  hr(),
   DTOutput('wholedf')
 )
 
 edit_pan <- tabPanel(
   title = "Add some data!",
-  fileInput('add', 'upload data to add (simulating within code for now'),
+  fileInput('add', 'upload data to add'),
+  "Edit your uploaded data here if anything looks wrong (Ctrl + Enter to save changes, Esc to discard). If columns are missing, recommend editing the .csv file instead.",
+  DTOutput('uploaded'),
   hr(),
-  "Here is what it will look like in the database",
+  "Here is what it will look like in the database (bold rows are new).",
   DTOutput('submitted'),
   hr(),
-  p("Edit your uploaded data here if anything looks wrong. Hopefully column name assignment is going to be able to be done as well."),
-  DTOutput('uploaded'),
-  actionButton('submitButton', label = 'Submit changes to the database')
+  wellPanel(fluidRow(
+    column(4, actionButton('submitButton', label = 'Submit changes to the database')),
+    column(3, textOutput('result'))
+  ))
 )
 
 ui <- fluidPage(
-  titlePanel("Testing..."),
+  titlePanel("Testing..."), 
   tabsetPanel(
     display_pan,
     edit_pan
@@ -62,86 +62,104 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
+  
+  custom_datatable <- function(data, ...) {
+    datatable(
+      data, 
+      editable = "row", rownames = FALSE, selection = 'none', ..., 
+      # filter = "top" is useful for big tables
+      options = list(
+        searching = TRUE, 
+        dom = "tlip"
+        #layout = list(topEnd = NULL)
+      )
+    )
+  }
 
   con <- DBI::dbConnect(RSQLite::SQLite(), here("testdb.sqlite"))
-  
   data <- tbl(con, "data")
+  data_rct <- reactiveVal(data)
 
-  
   # when using database tbls we have to do colnames (dplyr)
-  # datatables cannot display a tbl unfortunately
-  # updating the options based on the current data
-  updateSelectInput(session, 'otherselection', choices = colnames(data), selected = colnames(data))
+  updateSelectInput(session, 'selection', choices = colnames(data), selected = colnames(data))
   updateSelectInput(session, 'uniquecol', choices = colnames(data), selected = NA)
-  updateSelectInput(session, 'filtercol', choices = colnames(data), selected = NA)
-  
-  # testing data as reactive tbl ------------------------------------------------
+
   # showing some values of the selected column
   output$options <- renderText({
     selection <- input$uniquecol
     if (selection == "") "" 
-    else data %>% pull(input$uniquecol) %>% unique() %>% .[1:10] %>% paste0(collapse = ", ")
+    else data %>% select(selection) %>% distinct() %>% collect() %>% slice(1:10) %>% pull() %>%  paste0(collapse = ", ")
   })
   
-  # updating the data based on the cols selected and potential filters
-  wholedata_rct <- reactive({
-    selectdata <- data %>% select(input$otherselection) %>% collect()
-    if (input$filtercol == "" | input$filterval == "") selectdata
-    else selectdata %>% filter(str_detect(!!sym(input$filtercol), input$filterval))
+  output$wholedf <- renderDT({
+    data_rct() %>% select(input$selection) %>% collect %>% custom_datatable(filter = "top")
   })
-  
-  # showing the data
-  output$wholedf <- renderDT(datatable(wholedata_rct()))
   
   # want to simulate an added row of data
-  # we're going to use a regular tibble for this,
-  # but really we'd be reading a csv
-  to_add <- tibble(
-    name = "Billy Bob",
-    height = 2001,
-    mass = 11,
-    sex = "sure",
-    species = "hill billy bob"
-  )
-  
-  # https://yihui.shinyapps.io/DT-edit/
-  
-  # maybe it's because it's not a reactive value?
-  # we'll try that
+  to_add <- tibble(name = "Bill", height = 2001, mass = 600, birth_year = 23, species = "Hillbilly")
+  # this will have to be reactive based on the csv upload I think
   to_add_rct <- reactiveVal(to_add)
+  
+  # here is where we can update the data to add based on the csv input
+  # the upload thing has name, size, type, and datapath
+  # begins as NULL (not empty string like input boxes)
+  observe({
+    if (!is.null(input$add)) {
+      input$add$datapath %>% read_csv %>% to_add_rct()
+    }
+  })
+  
+  
   # updating the to_add data based on edit actions (Ctrl + Enter)
+  # not super useful, but cool
   observeEvent(input$uploaded_cell_edit, {
     editData(to_add_rct(), input$uploaded_cell_edit, rownames = FALSE) %>% 
       to_add_rct()
   })
   
-  # Again, showing the reactive data
-  output$uploaded <- renderDT(
-    datatable(to_add_rct(), editable = "row", rownames = FALSE, selection = 'none', options = list(searching = FALSE))
-  )
+  output$uploaded <- renderDT(to_add_rct() %>% datatable(editable = "row", selection = 'none', rownames = FALSE, options = list(dom = "t")))
   
-  # So now I guess we have to try to add the row to the table
-  # and show what the added result would look like
-  # putting the added data first ensures new is at the top
+  # combining sample of existing data then
+  # making a hidden marker column to bold the new stuff
   output$submitted <- renderDT(
-    datatable(
-      data %>% 
-        head() %>% collect() %>% bind_rows(to_add_rct(), .)
-    )
+    data %>% 
+      head %>% 
+      collect %>% 
+      bind_rows(
+        to_add_rct() %>% mutate(added = TRUE) %>% relocate(added), 
+        .
+      ) %>% 
+      datatable(
+        ., 
+        editable = "row", rownames = FALSE, selection = 'none',
+        options = list(
+          dom = "tlp",
+          rowCallback = JS(
+            "function(row, data) {",
+            "  if (data[0]) { $(row).css('font-weight', 'bold') };",
+            "}"
+          ),
+          columnDefs = list(list(visible = FALSE, targets = 0))
+        )
+      )
   )
   
   # then the submit button will do rows_insert on the database using the reactive to_add data
-  # so this does update the value of data,
-  # but for some reason the view data tab doesn't update unless I change the select or filter vals
-  # So I guess whole data is the problem?
-  # I feel like we need to fix the whole data paradigm
-  # and make it independent of the select / filter thing
+  # It's also not persistent through refreshes of the app since in_place = FALSE
+  # and maybe we can come up with some kind of iterable table
+  # also we can always add another editable table section and use rows_update
+  output$result <- renderText('Not submitted yet.')
+  
   observeEvent(input$submitButton, {
     # I think I am misunderstanding what in_place means
-    data <<- data %>% 
+    data_rct() %>% 
       rows_insert(
         to_add_rct(), conflict = "ignore", copy = TRUE, in_place = FALSE
-      )
+      ) %>% 
+      data_rct()
+    
+    output$result <- renderText("Data added!")
+    
   })
   
 }
