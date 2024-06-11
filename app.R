@@ -38,7 +38,7 @@ display_pan <- tabPanel(
   DTOutput('wholedf')
 )
 
-edit_pan <- tabPanel(
+add_pan <- tabPanel(
   title = "Add some data!",
   fileInput('add', 'upload data to add'),
   "Edit your uploaded data here if anything looks wrong (Ctrl + Enter to save changes, Esc to discard). If columns are missing, recommend editing the .csv file instead.",
@@ -53,29 +53,45 @@ edit_pan <- tabPanel(
   ))
 )
 
+
+edit_pan <- tabPanel(
+  title = "Edit some data - be careful!",
+  "I guess we can't reuse the existing DTOutput for everything since that one is not editable as far as I can tell.",
+  "But I suppose we can reuse the select functionality. Maybe we need to have some more advanced filtering.",
+  hr(),
+  fluidRow(
+    column(4,selectInput('editSelection', 'Select Cols', choices = '', multiple = TRUE)),
+    column(4, selectInput('filterSelection', 'Select Filter Col', choices = '')),
+    column(4, selectInput('valueSelection', 'Select Filter Val(s)', choices = '', multiple = TRUE))
+  ),
+  hr(),
+  DTOutput('editTable')
+)
+
 ui <- fluidPage(
   titlePanel("Testing..."), 
   tabsetPanel(
     display_pan,
+    add_pan,
     edit_pan
   )
 )
 
 server <- function(input, output, session) {
   
-  custom_datatable <- function(data, ...) {
-    datatable(
-      data, 
-      editable = "row", rownames = FALSE, selection = 'none', ..., 
-      # filter = "top" is useful for big tables
-      options = list(
-        searching = TRUE, 
-        dom = "tlip"
-        #layout = list(topEnd = NULL)
-      )
-    )
-  }
-
+  # custom_datatable <- function(data, ...) {
+  #   datatable(
+  #     data, 
+  #     editable = "row", rownames = FALSE, selection = 'none', ..., 
+  #     # filter = "top" is useful for big tables
+  #     options = list(
+  #       searching = TRUE, 
+  #       dom = "tlip"
+  #       #layout = list(topEnd = NULL)
+  #     )
+  #   )
+  # }
+  
   con <- DBI::dbConnect(RSQLite::SQLite(), here("testdb.sqlite"))
   data <- tbl(con, "data")
   data_rct <- reactiveVal(data)
@@ -83,6 +99,34 @@ server <- function(input, output, session) {
   # when using database tbls we have to do colnames (dplyr)
   updateSelectInput(session, 'selection', choices = colnames(data), selected = colnames(data))
   updateSelectInput(session, 'uniquecol', choices = colnames(data), selected = NA)
+  updateSelectInput(session, 'editSelection', choices = colnames(data), selected = colnames(data)[1:5])
+  
+  # somehow the observes being separate makes it OK?
+  observe(updateSelectInput(session, 'filterSelection', choices = input$editSelection))
+  # apparently pull does the same thing as collect (can use base R)
+  observe(updateSelectInput(
+    session, 'valueSelection', 
+    choices = if ( input$filterSelection == "" ) NA else data_rct() %>% pull(input$filterSelection) %>% unique %>% sort
+  ))
+  observe(
+    output$editTable <- renderDT({
+      selectData <- data_rct() %>% select(input$editSelection)
+      filterData <- if (is.null(input$valueSelection)) {
+        selectData %>% collect() 
+      } else {
+        selectData %>% 
+          filter(
+            !!sym(input$filterSelection) %in% input$valueSelection
+          ) %>% 
+          collect()
+      }
+      filterData %>% datatable(
+        rownames = FALSE, selection = 'none', editable = 'row', 
+        options = list(dom = 'tpl')
+      )
+      
+    })
+  )
 
   # showing some values of the selected column
   output$options <- renderText({
@@ -92,7 +136,7 @@ server <- function(input, output, session) {
   })
   
   output$wholedf <- renderDT({
-    data_rct() %>% select(input$selection) %>% collect %>% custom_datatable(filter = "top")
+    data_rct() %>% select(input$selection) %>% collect %>% datatable(filter = "top", rownames = FALSE, selection = 'none')
   })
   
   # want to simulate an added row of data
@@ -144,25 +188,39 @@ server <- function(input, output, session) {
       )
   )
   
-  # then the submit button will do rows_insert on the database using the reactive to_add data
-  # It's also not persistent through refreshes of the app since in_place = FALSE
-  # and maybe we can come up with some kind of iterable table
-  # also we can always add another editable table section and use rows_update
+
   output$result <- renderText('Not submitted yet.')
   
+  # so both of these options work (in_place does it invisibly)
+  # and neither cause nasty nesting SQL since we are explicitly computing the command
+  # It was making two temp tables in one round - one of them is probs the "to_add" table
+  # I think copy_inline makes it only generate one
   observeEvent(input$submitButton, {
-    # I think I am misunderstanding what in_place means
-    data_rct() %>% 
-      rows_insert(
-        to_add_rct(), conflict = "ignore", copy = TRUE, in_place = FALSE
-      ) %>% 
-      data_rct()
+    print(RSQLite::dbListTables(con))
+    # 
+    # query <- data_rct() %>% 
+    #   rows_insert(
+    #     to_add_rct(), conflict = "ignore", copy = TRUE, in_place = FALSE
+    #   )
+    # query %>% compute() %>% data_rct()
     
-    output$result <- renderText("Data added!")
-    
+    to_add_tbl <- dbplyr::copy_inline(con, to_add_rct())
+    data_rct() %>% rows_insert(to_add_tbl, conflict = "ignore") %>% compute %>% data_rct()
+  
+    output$result <- if (input$submitButton == 1) "Data added!" %>% renderText()
+      else paste0("Data added! (x", input$submitButton, "!)" ) %>% renderText()
   })
   
+  # this will actually modify the data - idk how to access the temp table
+  observeEvent(input$commitAdd, {
+    query <- data_rct() %>%
+      rows_insert(
+        to_add_rct(), conflict = "ignore", copy = TRUE, in_place = TRUE
+      )
+  })
 }
+
+
 
 shinyApp(ui = ui, server = server)
 

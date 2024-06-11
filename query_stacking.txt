@@ -1,0 +1,698 @@
+
+Basically this happened by doing data_rct() into rows_insert() and then taking the result of that
+and putting it into data_rct() again. This was because in_place was set to false, so it basically
+just kept nesting the query and its results and killing performance.
+Instead we can either do in_place = TRUE (medium) or try to compute the actual results
+in a temporary table and then update the data with that.
+
+---------------------------------------------------------------------------------------
+Submit no. 1
+---------------------------------------------------------------------------------------
+
+Matching, by = "name"
+<SQL>
+SELECT *
+FROM `data`
+
+UNION ALL
+
+SELECT
+  `name`,
+  `height`,
+  `mass`,
+  NULL AS `hair_color`,
+  NULL AS `skin_color`,
+  NULL AS `eye_color`,
+  `birth_year`,
+  NULL AS `sex`,
+  NULL AS `gender`,
+  NULL AS `homeworld`,
+  `species`,
+  NULL AS `birthdate`
+FROM (
+  SELECT `dbplyr_52gV0QCwyU`.*
+  FROM `dbplyr_52gV0QCwyU`
+  WHERE NOT EXISTS (
+    SELECT 1 FROM `data`
+    WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+  )
+) AS `q01`
+
+---------------------------------------------------------------------------------------
+Submit no. 2
+---------------------------------------------------------------------------------------
+
+<SQL>
+SELECT *
+FROM `data`
+
+UNION ALL
+
+SELECT
+  `name`,
+  `height`,
+  `mass`,
+  NULL AS `hair_color`,
+  NULL AS `skin_color`,
+  NULL AS `eye_color`,
+  `birth_year`,
+  NULL AS `sex`,
+  NULL AS `gender`,
+  NULL AS `homeworld`,
+  `species`,
+  NULL AS `birthdate`
+FROM (
+  SELECT `dbplyr_52gV0QCwyU`.*
+  FROM `dbplyr_52gV0QCwyU`
+  WHERE NOT EXISTS (
+    SELECT 1 FROM `data`
+    WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+  )
+) AS `q01`
+
+UNION ALL
+
+SELECT
+  `name`,
+  `height`,
+  `mass`,
+  NULL AS `hair_color`,
+  NULL AS `skin_color`,
+  NULL AS `eye_color`,
+  `birth_year`,
+  NULL AS `sex`,
+  NULL AS `gender`,
+  NULL AS `homeworld`,
+  `species`,
+  NULL AS `birthdate`
+FROM (
+  SELECT `dbplyr_xFeKSJXWDK`.*
+  FROM `dbplyr_xFeKSJXWDK`
+  WHERE NOT EXISTS (
+    SELECT 1 FROM (
+    SELECT *
+    FROM `data`
+
+    UNION ALL
+
+    SELECT
+      `name`,
+      `height`,
+      `mass`,
+      NULL AS `hair_color`,
+      NULL AS `skin_color`,
+      NULL AS `eye_color`,
+      `birth_year`,
+      NULL AS `sex`,
+      NULL AS `gender`,
+      NULL AS `homeworld`,
+      `species`,
+      NULL AS `birthdate`
+    FROM (
+      SELECT `dbplyr_52gV0QCwyU`.*
+      FROM `dbplyr_52gV0QCwyU`
+      WHERE NOT EXISTS (
+        SELECT 1 FROM `data`
+        WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+      )
+    ) AS `q01`
+) AS `RHS`
+    WHERE (`dbplyr_xFeKSJXWDK`.`name` = `RHS`.`name`)
+  )
+) AS `q01`
+
+---------------------------------------------------------------------------------------
+Submit no. 3
+---------------------------------------------------------------------------------------
+
+Matching, by = "name"
+<SQL>
+SELECT *
+FROM `data`
+
+UNION ALL
+
+SELECT
+  `name`,
+  `height`,
+  `mass`,
+  NULL AS `hair_color`,
+  NULL AS `skin_color`,
+  NULL AS `eye_color`,
+  `birth_year`,
+  NULL AS `sex`,
+  NULL AS `gender`,
+  NULL AS `homeworld`,
+  `species`,
+  NULL AS `birthdate`
+FROM (
+  SELECT `dbplyr_52gV0QCwyU`.*
+  FROM `dbplyr_52gV0QCwyU`
+  WHERE NOT EXISTS (
+    SELECT 1 FROM `data`
+    WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+  )
+) AS `q01`
+
+UNION ALL
+
+SELECT
+  `name`,
+  `height`,
+  `mass`,
+  NULL AS `hair_color`,
+  NULL AS `skin_color`,
+  NULL AS `eye_color`,
+  `birth_year`,
+  NULL AS `sex`,
+  NULL AS `gender`,
+  NULL AS `homeworld`,
+  `species`,
+  NULL AS `birthdate`
+FROM (
+  SELECT `dbplyr_xFeKSJXWDK`.*
+  FROM `dbplyr_xFeKSJXWDK`
+  WHERE NOT EXISTS (
+    SELECT 1 FROM (
+    SELECT *
+    FROM `data`
+
+    UNION ALL
+
+    SELECT
+      `name`,
+      `height`,
+      `mass`,
+      NULL AS `hair_color`,
+      NULL AS `skin_color`,
+      NULL AS `eye_color`,
+      `birth_year`,
+      NULL AS `sex`,
+      NULL AS `gender`,
+      NULL AS `homeworld`,
+      `species`,
+      NULL AS `birthdate`
+    FROM (
+      SELECT `dbplyr_52gV0QCwyU`.*
+      FROM `dbplyr_52gV0QCwyU`
+      WHERE NOT EXISTS (
+        SELECT 1 FROM `data`
+        WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+      )
+    ) AS `q01`
+) AS `RHS`
+    WHERE (`dbplyr_xFeKSJXWDK`.`name` = `RHS`.`name`)
+  )
+) AS `q01`
+
+UNION ALL
+
+SELECT
+  `name`,
+  `height`,
+  `mass`,
+  NULL AS `hair_color`,
+  NULL AS `skin_color`,
+  NULL AS `eye_color`,
+  `birth_year`,
+  NULL AS `sex`,
+  NULL AS `gender`,
+  NULL AS `homeworld`,
+  `species`,
+  NULL AS `birthdate`
+FROM (
+  SELECT `dbplyr_C96IVzrR0T`.*
+  FROM `dbplyr_C96IVzrR0T`
+  WHERE NOT EXISTS (
+    SELECT 1 FROM (
+    SELECT *
+    FROM `data`
+
+    UNION ALL
+
+    SELECT
+      `name`,
+      `height`,
+      `mass`,
+      NULL AS `hair_color`,
+      NULL AS `skin_color`,
+      NULL AS `eye_color`,
+      `birth_year`,
+      NULL AS `sex`,
+      NULL AS `gender`,
+      NULL AS `homeworld`,
+      `species`,
+      NULL AS `birthdate`
+    FROM (
+      SELECT `dbplyr_52gV0QCwyU`.*
+      FROM `dbplyr_52gV0QCwyU`
+      WHERE NOT EXISTS (
+        SELECT 1 FROM `data`
+        WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+      )
+    ) AS `q01`
+
+    UNION ALL
+
+    SELECT
+      `name`,
+      `height`,
+      `mass`,
+      NULL AS `hair_color`,
+      NULL AS `skin_color`,
+      NULL AS `eye_color`,
+      `birth_year`,
+      NULL AS `sex`,
+      NULL AS `gender`,
+      NULL AS `homeworld`,
+      `species`,
+      NULL AS `birthdate`
+    FROM (
+      SELECT `dbplyr_xFeKSJXWDK`.*
+      FROM `dbplyr_xFeKSJXWDK`
+      WHERE NOT EXISTS (
+        SELECT 1 FROM (
+        SELECT *
+        FROM `data`
+
+        UNION ALL
+
+        SELECT
+          `name`,
+          `height`,
+          `mass`,
+          NULL AS `hair_color`,
+          NULL AS `skin_color`,
+          NULL AS `eye_color`,
+          `birth_year`,
+          NULL AS `sex`,
+          NULL AS `gender`,
+          NULL AS `homeworld`,
+          `species`,
+          NULL AS `birthdate`
+        FROM (
+          SELECT `dbplyr_52gV0QCwyU`.*
+          FROM `dbplyr_52gV0QCwyU`
+          WHERE NOT EXISTS (
+            SELECT 1 FROM `data`
+            WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+          )
+        ) AS `q01`
+) AS `RHS`
+        WHERE (`dbplyr_xFeKSJXWDK`.`name` = `RHS`.`name`)
+      )
+    ) AS `q01`
+) AS `RHS`
+    WHERE (`dbplyr_C96IVzrR0T`.`name` = `RHS`.`name`)
+  )
+) AS `q01`
+
+---------------------------------------------------------------------------------------
+Submit no. 4
+---------------------------------------------------------------------------------------
+
+Matching, by = "name"
+<SQL>
+SELECT *
+FROM `data`
+
+UNION ALL
+
+SELECT
+  `name`,
+  `height`,
+  `mass`,
+  NULL AS `hair_color`,
+  NULL AS `skin_color`,
+  NULL AS `eye_color`,
+  `birth_year`,
+  NULL AS `sex`,
+  NULL AS `gender`,
+  NULL AS `homeworld`,
+  `species`,
+  NULL AS `birthdate`
+FROM (
+  SELECT `dbplyr_52gV0QCwyU`.*
+  FROM `dbplyr_52gV0QCwyU`
+  WHERE NOT EXISTS (
+    SELECT 1 FROM `data`
+    WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+  )
+) AS `q01`
+
+UNION ALL
+
+SELECT
+  `name`,
+  `height`,
+  `mass`,
+  NULL AS `hair_color`,
+  NULL AS `skin_color`,
+  NULL AS `eye_color`,
+  `birth_year`,
+  NULL AS `sex`,
+  NULL AS `gender`,
+  NULL AS `homeworld`,
+  `species`,
+  NULL AS `birthdate`
+FROM (
+  SELECT `dbplyr_xFeKSJXWDK`.*
+  FROM `dbplyr_xFeKSJXWDK`
+  WHERE NOT EXISTS (
+    SELECT 1 FROM (
+    SELECT *
+    FROM `data`
+
+    UNION ALL
+
+    SELECT
+      `name`,
+      `height`,
+      `mass`,
+      NULL AS `hair_color`,
+      NULL AS `skin_color`,
+      NULL AS `eye_color`,
+      `birth_year`,
+      NULL AS `sex`,
+      NULL AS `gender`,
+      NULL AS `homeworld`,
+      `species`,
+      NULL AS `birthdate`
+    FROM (
+      SELECT `dbplyr_52gV0QCwyU`.*
+      FROM `dbplyr_52gV0QCwyU`
+      WHERE NOT EXISTS (
+        SELECT 1 FROM `data`
+        WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+      )
+    ) AS `q01`
+) AS `RHS`
+    WHERE (`dbplyr_xFeKSJXWDK`.`name` = `RHS`.`name`)
+  )
+) AS `q01`
+
+UNION ALL
+
+SELECT
+  `name`,
+  `height`,
+  `mass`,
+  NULL AS `hair_color`,
+  NULL AS `skin_color`,
+  NULL AS `eye_color`,
+  `birth_year`,
+  NULL AS `sex`,
+  NULL AS `gender`,
+  NULL AS `homeworld`,
+  `species`,
+  NULL AS `birthdate`
+FROM (
+  SELECT `dbplyr_C96IVzrR0T`.*
+  FROM `dbplyr_C96IVzrR0T`
+  WHERE NOT EXISTS (
+    SELECT 1 FROM (
+    SELECT *
+    FROM `data`
+
+    UNION ALL
+
+    SELECT
+      `name`,
+      `height`,
+      `mass`,
+      NULL AS `hair_color`,
+      NULL AS `skin_color`,
+      NULL AS `eye_color`,
+      `birth_year`,
+      NULL AS `sex`,
+      NULL AS `gender`,
+      NULL AS `homeworld`,
+      `species`,
+      NULL AS `birthdate`
+    FROM (
+      SELECT `dbplyr_52gV0QCwyU`.*
+      FROM `dbplyr_52gV0QCwyU`
+      WHERE NOT EXISTS (
+        SELECT 1 FROM `data`
+        WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+      )
+    ) AS `q01`
+
+    UNION ALL
+
+    SELECT
+      `name`,
+      `height`,
+      `mass`,
+      NULL AS `hair_color`,
+      NULL AS `skin_color`,
+      NULL AS `eye_color`,
+      `birth_year`,
+      NULL AS `sex`,
+      NULL AS `gender`,
+      NULL AS `homeworld`,
+      `species`,
+      NULL AS `birthdate`
+    FROM (
+      SELECT `dbplyr_xFeKSJXWDK`.*
+      FROM `dbplyr_xFeKSJXWDK`
+      WHERE NOT EXISTS (
+        SELECT 1 FROM (
+        SELECT *
+        FROM `data`
+
+        UNION ALL
+
+        SELECT
+          `name`,
+          `height`,
+          `mass`,
+          NULL AS `hair_color`,
+          NULL AS `skin_color`,
+          NULL AS `eye_color`,
+          `birth_year`,
+          NULL AS `sex`,
+          NULL AS `gender`,
+          NULL AS `homeworld`,
+          `species`,
+          NULL AS `birthdate`
+        FROM (
+          SELECT `dbplyr_52gV0QCwyU`.*
+          FROM `dbplyr_52gV0QCwyU`
+          WHERE NOT EXISTS (
+            SELECT 1 FROM `data`
+            WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+          )
+        ) AS `q01`
+) AS `RHS`
+        WHERE (`dbplyr_xFeKSJXWDK`.`name` = `RHS`.`name`)
+      )
+    ) AS `q01`
+) AS `RHS`
+    WHERE (`dbplyr_C96IVzrR0T`.`name` = `RHS`.`name`)
+  )
+) AS `q01`
+
+UNION ALL
+
+SELECT
+  `name`,
+  `height`,
+  `mass`,
+  NULL AS `hair_color`,
+  NULL AS `skin_color`,
+  NULL AS `eye_color`,
+  `birth_year`,
+  NULL AS `sex`,
+  NULL AS `gender`,
+  NULL AS `homeworld`,
+  `species`,
+  NULL AS `birthdate`
+FROM (
+  SELECT `dbplyr_zvmlRTf28u`.*
+  FROM `dbplyr_zvmlRTf28u`
+  WHERE NOT EXISTS (
+    SELECT 1 FROM (
+    SELECT *
+    FROM `data`
+
+    UNION ALL
+
+    SELECT
+      `name`,
+      `height`,
+      `mass`,
+      NULL AS `hair_color`,
+      NULL AS `skin_color`,
+      NULL AS `eye_color`,
+      `birth_year`,
+      NULL AS `sex`,
+      NULL AS `gender`,
+      NULL AS `homeworld`,
+      `species`,
+      NULL AS `birthdate`
+    FROM (
+      SELECT `dbplyr_52gV0QCwyU`.*
+      FROM `dbplyr_52gV0QCwyU`
+      WHERE NOT EXISTS (
+        SELECT 1 FROM `data`
+        WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+      )
+    ) AS `q01`
+
+    UNION ALL
+
+    SELECT
+      `name`,
+      `height`,
+      `mass`,
+      NULL AS `hair_color`,
+      NULL AS `skin_color`,
+      NULL AS `eye_color`,
+      `birth_year`,
+      NULL AS `sex`,
+      NULL AS `gender`,
+      NULL AS `homeworld`,
+      `species`,
+      NULL AS `birthdate`
+    FROM (
+      SELECT `dbplyr_xFeKSJXWDK`.*
+      FROM `dbplyr_xFeKSJXWDK`
+      WHERE NOT EXISTS (
+        SELECT 1 FROM (
+        SELECT *
+        FROM `data`
+
+        UNION ALL
+
+        SELECT
+          `name`,
+          `height`,
+          `mass`,
+          NULL AS `hair_color`,
+          NULL AS `skin_color`,
+          NULL AS `eye_color`,
+          `birth_year`,
+          NULL AS `sex`,
+          NULL AS `gender`,
+          NULL AS `homeworld`,
+          `species`,
+          NULL AS `birthdate`
+        FROM (
+          SELECT `dbplyr_52gV0QCwyU`.*
+          FROM `dbplyr_52gV0QCwyU`
+          WHERE NOT EXISTS (
+            SELECT 1 FROM `data`
+            WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+          )
+        ) AS `q01`
+) AS `RHS`
+        WHERE (`dbplyr_xFeKSJXWDK`.`name` = `RHS`.`name`)
+      )
+    ) AS `q01`
+
+    UNION ALL
+
+    SELECT
+      `name`,
+      `height`,
+      `mass`,
+      NULL AS `hair_color`,
+      NULL AS `skin_color`,
+      NULL AS `eye_color`,
+      `birth_year`,
+      NULL AS `sex`,
+      NULL AS `gender`,
+      NULL AS `homeworld`,
+      `species`,
+      NULL AS `birthdate`
+    FROM (
+      SELECT `dbplyr_C96IVzrR0T`.*
+      FROM `dbplyr_C96IVzrR0T`
+      WHERE NOT EXISTS (
+        SELECT 1 FROM (
+        SELECT *
+        FROM `data`
+
+        UNION ALL
+
+        SELECT
+          `name`,
+          `height`,
+          `mass`,
+          NULL AS `hair_color`,
+          NULL AS `skin_color`,
+          NULL AS `eye_color`,
+          `birth_year`,
+          NULL AS `sex`,
+          NULL AS `gender`,
+          NULL AS `homeworld`,
+          `species`,
+          NULL AS `birthdate`
+        FROM (
+          SELECT `dbplyr_52gV0QCwyU`.*
+          FROM `dbplyr_52gV0QCwyU`
+          WHERE NOT EXISTS (
+            SELECT 1 FROM `data`
+            WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+          )
+        ) AS `q01`
+
+        UNION ALL
+
+        SELECT
+          `name`,
+          `height`,
+          `mass`,
+          NULL AS `hair_color`,
+          NULL AS `skin_color`,
+          NULL AS `eye_color`,
+          `birth_year`,
+          NULL AS `sex`,
+          NULL AS `gender`,
+          NULL AS `homeworld`,
+          `species`,
+          NULL AS `birthdate`
+        FROM (
+          SELECT `dbplyr_xFeKSJXWDK`.*
+          FROM `dbplyr_xFeKSJXWDK`
+          WHERE NOT EXISTS (
+            SELECT 1 FROM (
+            SELECT *
+            FROM `data`
+
+            UNION ALL
+
+            SELECT
+              `name`,
+              `height`,
+              `mass`,
+              NULL AS `hair_color`,
+              NULL AS `skin_color`,
+              NULL AS `eye_color`,
+              `birth_year`,
+              NULL AS `sex`,
+              NULL AS `gender`,
+              NULL AS `homeworld`,
+              `species`,
+              NULL AS `birthdate`
+            FROM (
+              SELECT `dbplyr_52gV0QCwyU`.*
+              FROM `dbplyr_52gV0QCwyU`
+              WHERE NOT EXISTS (
+                SELECT 1 FROM `data`
+                WHERE (`dbplyr_52gV0QCwyU`.`name` = `data`.`name`)
+              )
+            ) AS `q01`
+) AS `RHS`
+            WHERE (`dbplyr_xFeKSJXWDK`.`name` = `RHS`.`name`)
+          )
+        ) AS `q01`
+) AS `RHS`
+        WHERE (`dbplyr_C96IVzrR0T`.`name` = `RHS`.`name`)
+      )
+    ) AS `q01`
+) AS `RHS`
+    WHERE (`dbplyr_zvmlRTf28u`.`name` = `RHS`.`name`)
+  )
+) AS `q01`
