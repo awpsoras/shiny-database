@@ -48,8 +48,12 @@ add_pan <- tabPanel(
   DTOutput('submitted'),
   hr(),
   wellPanel(fluidRow(
-    column(4, actionButton('submitButton', label = 'Submit changes to the database')),
-    column(3, textOutput('result'))
+    column(4, actionButton('submitAdd', label = 'Submit changes to the database')),
+    column(3, textOutput('submitResult'))
+  )),
+  wellPanel(fluidRow(
+    column(4, actionButton('commitAdd', label = 'Commit changes to the database')),
+    column(3, textOutput('commitResult'))
   ))
 )
 
@@ -79,6 +83,9 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   
+  # overall, data_rct() is a reactve, lazy tbl reference
+  # to_add_rct() is an in-memory tibble, actual data
+  
   # custom_datatable <- function(data, ...) {
   #   datatable(
   #     data, 
@@ -93,70 +100,49 @@ server <- function(input, output, session) {
   # }
   
   con <- DBI::dbConnect(RSQLite::SQLite(), here("testdb.sqlite"))
-  data <- tbl(con, "data")
-  data_rct <- reactiveVal(data)
+  data_rct <- tbl(con, "data") %>% reactiveVal()
+  
+  # view section -------------------------------------------------------------------------------------------------------------
 
   # when using database tbls we have to do colnames (dplyr)
-  updateSelectInput(session, 'selection', choices = colnames(data), selected = colnames(data))
-  updateSelectInput(session, 'uniquecol', choices = colnames(data), selected = NA)
-  updateSelectInput(session, 'editSelection', choices = colnames(data), selected = colnames(data)[1:5])
+  # since we are using reactive here, everything here has to be in an observe
+  # these are independent I think ?
+  observe(label = "View Select/Unique",{
+    updateSelectInput(session, 'selection', choices = colnames(data_rct()), selected = colnames(data_rct()))
+    updateSelectInput(session, 'uniquecol', choices = colnames(data_rct()), selected = NA)
+  })
   
-  # somehow the observes being separate makes it OK?
-  observe(updateSelectInput(session, 'filterSelection', choices = input$editSelection))
-  # apparently pull does the same thing as collect (can use base R)
-  observe(updateSelectInput(
-    session, 'valueSelection', 
-    choices = if ( input$filterSelection == "" ) NA else data_rct() %>% pull(input$filterSelection) %>% unique %>% sort
-  ))
-  observe(
-    output$editTable <- renderDT({
-      selectData <- data_rct() %>% select(input$editSelection)
-      filterData <- if (is.null(input$valueSelection)) {
-        selectData %>% collect() 
-      } else {
-        selectData %>% 
-          filter(
-            !!sym(input$filterSelection) %in% input$valueSelection
-          ) %>% 
-          collect()
-      }
-      filterData %>% datatable(
-        rownames = FALSE, selection = 'none', editable = 'row', 
-        options = list(dom = 'tpl')
-      )
-      
-    })
-  )
-
   # showing some values of the selected column
   output$options <- renderText({
     selection <- input$uniquecol
     if (selection == "") "" 
-    else data %>% select(selection) %>% distinct() %>% collect() %>% slice(1:10) %>% pull() %>%  paste0(collapse = ", ")
+    else data_rct() %>% select(selection) %>% distinct() %>% collect() %>% slice(1:10) %>% pull() %>%  paste0(collapse = ", ")
   })
   
   output$wholedf <- renderDT({
     data_rct() %>% select(input$selection) %>% collect %>% datatable(filter = "top", rownames = FALSE, selection = 'none')
   })
   
+  # add section -------------------------------------------------------------------------------------------------------------
+  
   # want to simulate an added row of data
-  to_add <- tibble(name = "Bill", height = 2001, mass = 600, birth_year = 23, species = "Hillbilly")
-  # this will have to be reactive based on the csv upload I think
-  to_add_rct <- reactiveVal(to_add)
+  # will be reactive since we have edits and can overwrite it with the uploaded csv
+  # in reality this won't exist and will be initialized by the upload button only
+  to_add_rct <- tibble(name = "Bill", height = 2001, mass = 600, birth_year = 23, species = "Hillbilly") %>%
+    reactiveVal()
   
   # here is where we can update the data to add based on the csv input
   # the upload thing has name, size, type, and datapath
   # begins as NULL (not empty string like input boxes)
-  observe({
+  observe(label = "Update to_add from csv", {
     if (!is.null(input$add)) {
       input$add$datapath %>% read_csv %>% to_add_rct()
     }
   })
   
-  
   # updating the to_add data based on edit actions (Ctrl + Enter)
   # not super useful, but cool
-  observeEvent(input$uploaded_cell_edit, {
+  observeEvent(label = "Update to_add from cell edit", input$uploaded_cell_edit, {
     editData(to_add_rct(), input$uploaded_cell_edit, rownames = FALSE) %>% 
       to_add_rct()
   })
@@ -166,7 +152,7 @@ server <- function(input, output, session) {
   # combining sample of existing data then
   # making a hidden marker column to bold the new stuff
   output$submitted <- renderDT(
-    data %>% 
+    data_rct() %>% 
       head %>% 
       collect %>% 
       bind_rows(
@@ -187,7 +173,6 @@ server <- function(input, output, session) {
         )
       )
   )
-  
 
   output$result <- renderText('Not submitted yet.')
   
@@ -195,29 +180,63 @@ server <- function(input, output, session) {
   # and neither cause nasty nesting SQL since we are explicitly computing the command
   # It was making two temp tables in one round - one of them is probs the "to_add" table
   # I think copy_inline makes it only generate one
-  observeEvent(input$submitButton, {
+  observeEvent(label = "Submit add to temp table", input$submitAdd, {
     print(RSQLite::dbListTables(con))
-    # 
-    # query <- data_rct() %>% 
-    #   rows_insert(
-    #     to_add_rct(), conflict = "ignore", copy = TRUE, in_place = FALSE
-    #   )
-    # query %>% compute() %>% data_rct()
     
     to_add_tbl <- dbplyr::copy_inline(con, to_add_rct())
+    # explicitly update data_rct(), because here the identity of data_rct() actually changes - it becomes a different tbl (a temp one)
     data_rct() %>% rows_insert(to_add_tbl, conflict = "ignore") %>% compute %>% data_rct()
-  
-    output$result <- if (input$submitButton == 1) "Data added!" %>% renderText()
-      else paste0("Data added! (x", input$submitButton, "!)" ) %>% renderText()
+    
+    output$submitResult <- if (input$submitAdd == 1) "Data added!" %>% renderText()
+    else paste0("Data added! (x", input$submitAdd, "!)" ) %>% renderText()
   })
   
   # this will actually modify the data - idk how to access the temp table
-  observeEvent(input$commitAdd, {
-    query <- data_rct() %>%
-      rows_insert(
-        to_add_rct(), conflict = "ignore", copy = TRUE, in_place = TRUE
-      )
+  # so I suppose if the copied table is temporary, then maybe we can just do the connection bit and it won't 
+  # keep the temp table?
+  observeEvent(label = "Commit add to main table", input$commitAdd, {
+    writeCon <- DBI::dbConnect(RSQLite::SQLite(), here("testdb.sqlite"))
+    mainData <- tbl(writeCon, "data")
+    rows_insert(mainData, to_add_rct(), conflict = "ignore", copy = TRUE, in_place = TRUE)
+    DBI::dbDisconnect(writeCon)
   })
+  
+  # edit section -------------------------------------------------------------------------------------------------------------
+  
+  # # somehow the observes being separate makes it better
+
+  observe(label = "Edit View Columns", updateSelectInput(
+    session, 'editSelection', choices = colnames(data_rct()), selected = colnames(data_rct())[1:5]
+  ))
+  observe(label = "Edit Filter Column", updateSelectInput(
+    session, 'filterSelection', choices = input$editSelection, selected = input$filterSelection
+  ))
+  observe(label = "Edit Filter Val", updateSelectInput(
+    session, 'valueSelection', 
+    choices = if ( input$filterSelection == "" ) "" else data_rct() %>% pull(input$filterSelection) %>% unique %>% sort
+  ))
+  
+  # editTable rendering
+  observe(label = "Show Edit Table",
+    output$editTable <- renderDT({
+      selectData <- data_rct() %>% select(input$editSelection)
+      filterData <- if (is.null(input$valueSelection) | any(input$valueSelection == "")) {
+        selectData %>% collect() 
+      } else {
+        selectData %>% 
+          filter(
+            !!sym(input$filterSelection) %in% input$valueSelection
+          ) %>% 
+          collect()
+      }
+      filterData %>% datatable(
+        rownames = FALSE, selection = 'none', editable = 'row', 
+        options = list(dom = 'tpli')
+      )
+      
+    })
+  )
+  
 }
 
 
