@@ -147,7 +147,7 @@ server <- function(input, output, session) {
       output$viewTable <- renderDT(
         datatable(
           view_rct() %>% collect(), 
-          rownames = FALSE, selection = 'none', editable = 'row', options = list(dom = 'tpli'),
+          rownames = FALSE, selection = 'none', editable = FALSE, options = list(dom = 'tpli'),
           filter = "top"
         )
       ) 
@@ -186,7 +186,7 @@ server <- function(input, output, session) {
       bind_rows(to_add_rct() %>% mutate(added = TRUE) %>% relocate(added), .) %>% 
       datatable(
         ., 
-        editable = "row", rownames = FALSE, selection = 'none',
+        editable = FALSE, rownames = FALSE, selection = 'none',
         options = list(
           dom = "tlp",
           rowCallback = JS(
@@ -261,10 +261,12 @@ server <- function(input, output, session) {
   
   # edit table handling - I guess we'll commit directly to the server!
   # updating data based on edit actions (Ctrl + Enter)
+  # it will break if you try to edit the primary key (if you edit names)
+  # however, if we change this to upsert then it would work
   observeEvent(label = "Update to_add from cell edit", input$editTable_cell_edit, {
     edits <- editData(edit_rct() %>% collect, input$editTable_cell_edit, rownames = FALSE)
     write_con <- make_connection()
-    edits_tbl <- copy_inline(write_con, edits)
+    edits_tbl <- dbplyr::copy_inline(write_con, edits)
     # edits contains more than just the single edited row though so idk what will happen here
     rows_update(
       tbl(write_con, "data"), 
@@ -278,7 +280,8 @@ server <- function(input, output, session) {
 }
 
 
-shinyApp(ui = ui, server = server)
+# this is how to make it accessible for multiple local sessions if you're curious
+shinyApp(ui = ui, server = server, options = list(host = "0.0.0.0", port = 8787))
 
 
 
