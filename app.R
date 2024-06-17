@@ -97,13 +97,18 @@ server <- function(input, output, session) {
   # Plus we can always try duckdb instead, assuming that's available via rconnnect. 
   # One would have to imagine that's the case.
   
+  # For some reason RConnect does not like duck db. Idk why, but it's annoying.
+  
+  
   observeEvent(input$refresh, refreshDB())
   
   # I am going to try to convert it to duckdb and see if that makes it go away
   # nope it doesn't lol
   # I am going to assume it does not matter
-  make_connection <- function() { DBI::dbConnect(RSQLite::SQLite(), here("testdb.sqlite")) }
-  make_connection <- function() { duckdb::dbConnect(duckdb::duckdb(), here("test_duckdb")) }
+  # make_connection <- function() { DBI::dbConnect(RSQLite::SQLite(), here("data", "testdb.sqlite")) }
+  
+  # make_connection <- function() { duckdb::dbConnect(duckdb::duckdb(), here("data", "test_duckdb")) }
+  make_connection <- function() { DBI::dbConnect(RSQLite::SQLite(), here("data", "testdb.sqlite")) }
   close_connection <- function(con) { DBI::dbDisconnect(con) }
   
   con <- make_connection()
@@ -211,6 +216,7 @@ server <- function(input, output, session) {
     # so then if we do an edit on the edit pane, we end up not being able to see it
     # but edit_rct is based on the data_tbl, so I guess we still do? Idk it's crazy
     
+    
     data_tbl_rct() %>% rows_insert(to_add_tbl, conflict = "ignore") %>% compute %>% data_tbl_rct()
     
     output$submitResult <- if (input$submitAdd == 1) "Data added!" %>% renderText()
@@ -281,8 +287,10 @@ server <- function(input, output, session) {
 
 
 # this is how to make it accessible for multiple local sessions if you're curious
-shinyApp(ui = ui, server = server, options = list(host = "0.0.0.0", port = 8787))
+# shinyApp(ui = ui, server = server, options = list(host = "0.0.0.0", port = 8787))
 
+# for deployment
+shinyApp(ui = ui, server = server)
 
 
 

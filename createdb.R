@@ -5,8 +5,8 @@ library(here)
 # Run this to reset the example db!
 
 refreshDB <- function() {
-  # con <- DBI::dbConnect(RSQLite::SQLite(), here("testdb.sqlite"))
-  con <- duckdb::dbConnect(duckdb::duckdb(), here("test_duckdb"))
+  con <- DBI::dbConnect(RSQLite::SQLite(), here("data", "testdb.sqlite"))
+  # con <- duckdb::dbConnect(duckdb::duckdb(), here("data", "test_duckdb"))
   
   # I think I want to add some dates here somehow
   data <- starwars %>% select(!c(films, vehicles, starships)) %>% 
@@ -33,9 +33,5 @@ refreshDB <- function() {
   DBI::dbDisconnect(con)
 }
 
-# seeTables <- function() {
-#   con <- DBI::dbConnect(RSQLite::SQLite(), here("testdb.sqlite"))
-#   print(RSQLite::dbListTables(con))
-#   DBI::dbDisconnect(con)
-# }
+
 
