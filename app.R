@@ -117,6 +117,9 @@ server <- function(input, output, session) {
   # which obviously is not an option
   # Error: invoke_wrapped: throwing std::runtime_error
   # this didn't help
+  # this error actually seems to be related to the viewer pane in RStudio
+  # The error occurs when hitting "Stop" when the app is running in the viewer pane,
+  # but does not occur when the app runs in a new window or external. Pretty weird.
   onStop(function() {
     cat("Closing connection...\n")
     close_connection(con)
