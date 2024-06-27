@@ -120,6 +120,7 @@ server <- function(input, output, session) {
   # this error actually seems to be related to the viewer pane in RStudio
   # The error occurs when hitting "Stop" when the app is running in the viewer pane,
   # but does not occur when the app runs in a new window or external. Pretty weird.
+  # skibidi
   onStop(function() {
     cat("Closing connection...\n")
     close_connection(con)
