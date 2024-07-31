@@ -15,7 +15,12 @@ refreshDB <- function() {
       month = sample(1:12, nrow(.), replace = TRUE),
       day = sample(1:28, nrow(.), replace = TRUE),
       birthday = paste(year, month, day, sep = "-"),
-      birthdate = as_date(birthday)
+      birthdate = as_date(birthday),
+      # trying to do this to get dropdown in hot package to work
+      # but no dice
+      gender = factor(gender),
+      sex = factor(sex),
+      species = factor(species)
     ) %>% 
     select(!c(year, month, day, birthday))
   
@@ -31,6 +36,8 @@ refreshDB <- function() {
     mutate(birthdate = as_date(birthdate))
   
   DBI::dbDisconnect(con)
+  
+  print("Reset!")
 }
 
 

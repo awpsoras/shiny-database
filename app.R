@@ -14,6 +14,8 @@ library(DT)
 library(tidyverse)
 library(here)
 
+library(rhandsontable) # 7/31/24, testing to see if edit functionality is better
+
 source(here("createdb.R"))
 
 display_pan <- tabPanel(
@@ -62,6 +64,19 @@ edit_pan <- tabPanel(
   DTOutput('editTable')
 )
 
+hot_edit_pan <- tabPanel(
+  title = "HOT Edit some data",
+  p("This section is for targeted editing of specific cells - if you don't have a .csv file and just want to edit a row or two, this is your best bet."),
+  hr(),
+  fluidRow(
+    column(4,selectInput('hot_editSelect', 'Select Cols', choices = '', multiple = TRUE)),
+    column(4, selectInput('hot_editFilter', 'Select Filter Col', choices = '')),
+    column(4, selectInput('hot_editValue', 'Select Filter Val(s)', choices = '', multiple = TRUE))
+  ),
+  hr(),
+  rHandsontableOutput('hot_editTable')
+)
+
 utils_pan <- tabPanel(
   title = "Utilities",
   actionButton("refresh", "Refresh Database", icon = icon("rotate"))
@@ -73,6 +88,7 @@ ui <- fluidPage(
     display_pan,
     add_pan,
     edit_pan,
+    hot_edit_pan,
     utils_pan
   )
 )
@@ -284,6 +300,41 @@ server <- function(input, output, session) {
       unmatched = "ignore", in_place = TRUE
     )
     DBI::dbDisconnect(write_con)
+  })
+  
+  
+  # hot_edit section -------------------------------------------------------------------------------------
+  hot_edit_rct <- reactiveVal()
+  
+  # somehow the observes being separate makes it better
+  observe(updateSelectInput(
+    session, 'hot_editSelect', choices = colnames(data_tbl_rct()), selected = colnames(data_tbl_rct())[1:5]
+  ))
+  observe(updateSelectInput(
+    session, 'hot_editFilter', choices = input$hot_editSelect, selected = input$hot_editFilter # this maintains the val
+  ))
+  observe(updateSelectInput(
+    session, 'hot_editValue', 
+    choices = if (input$hot_editFilter == "") ""
+    else data_tbl_rct() %>% pull(input$hot_editFilter) %>% unique %>% sort
+  ))
+  
+  # update edit_rct based on current selection from data_tbl_rct()
+  # for some reason the whole factors -> dropdown thing isn't working
+  # idk why
+  observe({
+    if (!is.null(input$hot_editSelect)) {
+      data_tbl_rct() %>% 
+        select(input$hot_editSelect) %>% {
+          if (is.null(input$hot_editValue) | any(input$hot_editValue == "")) . 
+          else filter(., !!sym(input$hot_editFilter) %in% input$hot_editValue )
+        }
+    } %>% hot_edit_rct()
+    
+    output$hot_editTable <- hot_edit_rct() %>% 
+      collect() %>% 
+      rhandsontable() %>% 
+      renderRHandsontable()
   })
   
   # end of server function
