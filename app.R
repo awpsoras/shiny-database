@@ -36,7 +36,7 @@ add_pan <- tabPanel(
   p("This section is for adding data - once it's uploaded via .csv, you can edit and tweak things as needed. This also provides an opportunity to batch-edit values. For example, if you upload a .csv file with a list of existing IDs (ones that are already in the database), you can upload columns that you want to update (ex. change Sent from FALSE to TRUE, etc.)."),
   fileInput('add', 'upload data to add'),
   "Edit your uploaded data here if anything looks wrong (Ctrl + Enter to save changes, Esc to discard). If columns are missing, edit and reupload the .csv file instead.",
-  DTOutput('uploaded'),
+  rHandsontableOutput('uploaded'),
   hr(),
   "Here is what it will look like in the database (bold rows are new).",
   DTOutput('submitted'),
@@ -51,29 +51,24 @@ add_pan <- tabPanel(
   ))
 )
 
-edit_pan <- tabPanel(
-  title = "Edit some data - be careful!",
-  p("This section is for targeted editing of specific cells - if you don't have a .csv file and just want to edit a row or two, this is your best bet."),
-  hr(),
-  fluidRow(
-    column(4,selectInput('editSelect', 'Select Cols', choices = '', multiple = TRUE)),
-    column(4, selectInput('editFilter', 'Select Filter Col', choices = '')),
-    column(4, selectInput('editValue', 'Select Filter Val(s)', choices = '', multiple = TRUE))
-  ),
-  hr(),
-  DTOutput('editTable')
-)
-
 hot_edit_pan <- tabPanel(
   title = "HOT Edit some data",
   p("This section is for targeted editing of specific cells - if you don't have a .csv file and just want to edit a row or two, this is your best bet."),
   hr(),
+  bookmarkButton(),
   fluidRow(
     column(4,selectInput('hot_editSelect', 'Select Cols', choices = '', multiple = TRUE)),
     column(4, selectInput('hot_editFilter', 'Select Filter Col', choices = '')),
     column(4, selectInput('hot_editValue', 'Select Filter Val(s)', choices = '', multiple = TRUE))
   ),
+  # fluidRow(
+  #   selectInput('hot_editSelect', 'Select Cols', choices = '', multiple = TRUE),
+  #   selectInput('hot_editFilter', 'Select Filter Col', choices = ''),
+  #   selectInput('hot_editValue', 'Select Filter Val(s)', choices = '', multiple = TRUE)
+  # ),
   hr(),
+  actionButton("hot_edit_write", label = "Save", icon = NULL),
+  actionButton("hot_edit_undo", label = "Undo", icon = NULL),
   rHandsontableOutput('hot_editTable')
 )
 
@@ -82,16 +77,17 @@ utils_pan <- tabPanel(
   actionButton("refresh", "Refresh Database", icon = icon("rotate"))
 )
 
-ui <- fluidPage(
+# made function to try bookmarking, but 
+# bookmark does not seem to store anything
+ui <- function(request) {fluidPage(
   titlePanel("Testing..."), 
   tabsetPanel(
     display_pan,
     add_pan,
-    edit_pan,
     hot_edit_pan,
     utils_pan
   )
-)
+)}
 
 server <- function(input, output, session) {
   
@@ -195,12 +191,11 @@ server <- function(input, output, session) {
   })
   
   # updating the to_add data based on edit actions (Ctrl + Enter)
-  observeEvent(label = "Update to_add from cell edit", input$uploaded_cell_edit, {
-    editData(to_add_rct(), input$uploaded_cell_edit, rownames = FALSE) %>% 
-      to_add_rct()
+  observeEvent(label = "Update to_add from cell edit", input$uploaded, {
+    input$uploaded %>% hot_to_r() %>% to_add_rct()
   })
   
-  output$uploaded <- renderDT(to_add_rct() %>% datatable(editable = "row", selection = 'none', rownames = FALSE, options = list(dom = "t")))
+  output$uploaded <- to_add_rct() %>% rhandsontable() %>% renderRHandsontable()
   
   # combining sample of existing data then
   # making a hidden marker column to bold the new stuff
@@ -225,7 +220,6 @@ server <- function(input, output, session) {
   )
 
   output$result <- renderText('Not submitted yet.')
-  
   # copy_inline makes it only generate one temp table (the one with the new row(s))
   observeEvent(label = "Submit add to temp table", input$submitAdd, {
     to_add_tbl <- dbplyr::copy_inline(con, to_add_rct())
@@ -236,9 +230,7 @@ server <- function(input, output, session) {
     # so then if we do an edit on the edit pane, we end up not being able to see it
     # but edit_rct is based on the data_tbl, so I guess we still do? Idk it's crazy
     
-    
     data_tbl_rct() %>% rows_insert(to_add_tbl, conflict = "ignore") %>% compute %>% data_tbl_rct()
-    
     output$submitResult <- if (input$submitAdd == 1) "Data added!" %>% renderText()
     else paste0("Data added! (x", input$submitAdd, "!)" ) %>% renderText()
   })
@@ -249,57 +241,6 @@ server <- function(input, output, session) {
     mainData <- tbl(writeCon, "data")
     rows_insert(mainData, to_add_rct(), conflict = "ignore", copy = TRUE, in_place = TRUE)
     DBI::dbDisconnect(writeCon)
-  })
-  
-  # edit section -------------------------------------------------------------------------------------------------------------
-  edit_rct <- reactiveVal()
-  
-  # somehow the observes being separate makes it better
-  observe(label = "Edit View Columns", updateSelectInput(
-    session, 'editSelect', choices = colnames(data_tbl_rct()), selected = colnames(data_tbl_rct())[1:5]
-  ))
-  observe(label = "Edit Filter Column", updateSelectInput(
-    session, 'editFilter', choices = input$editSelect, selected = input$editFilter # this maintains the val
-  ))
-  observe(label = "Edit Filter Val", updateSelectInput(
-    session, 'editValue', 
-    choices = if (input$editFilter == "") ""
-              else data_tbl_rct() %>% pull(input$editFilter) %>% unique %>% sort
-  ))
-  
-  # update edit_rct based on current selection from data_tbl_rct()
-  observe(label = "Show Edit Table", {
-    if (!is.null(input$editSelect)) {
-      data_tbl_rct() %>% 
-        select(input$editSelect) %>% {
-          if (is.null(input$editValue) | any(input$editValue == "")) . 
-          else filter(., !!sym(input$editFilter) %in% input$editValue )
-        }
-    } %>% edit_rct()
-    
-    output$editTable <- renderDT(
-      datatable(
-        edit_rct() %>% collect(), 
-        rownames = FALSE, selection = 'none', editable = 'row', options = list(dom = 'tpli')
-      )
-    )
-  })
-  
-  # edit table handling - I guess we'll commit directly to the server!
-  # updating data based on edit actions (Ctrl + Enter)
-  # it will break if you try to edit the primary key (if you edit names)
-  # however, if we change this to upsert then it would work
-  observeEvent(label = "Update to_add from cell edit", input$editTable_cell_edit, {
-    edits <- editData(edit_rct() %>% collect, input$editTable_cell_edit, rownames = FALSE)
-    write_con <- make_connection()
-    edits_tbl <- dbplyr::copy_inline(write_con, edits)
-    # edits contains more than just the single edited row though so idk what will happen here
-    rows_update(
-      tbl(write_con, "data"), 
-      edits_tbl, 
-      unmatched = "ignore", in_place = TRUE
-    )
-    DBI::dbDisconnect(write_con)
   })
   
   
@@ -323,19 +264,48 @@ server <- function(input, output, session) {
   # for some reason the whole factors -> dropdown thing isn't working
   # idk why
   observe({
-    if (!is.null(input$hot_editSelect)) {
+    {if (!is.null(input$hot_editSelect)) {
       data_tbl_rct() %>% 
         select(input$hot_editSelect) %>% {
           if (is.null(input$hot_editValue) | any(input$hot_editValue == "")) . 
           else filter(., !!sym(input$hot_editFilter) %in% input$hot_editValue )
         }
-    } %>% hot_edit_rct()
+    } else data_tbl_rct() } %>% hot_edit_rct()
     
+    # why does this have to be in an observe block?
     output$hot_editTable <- hot_edit_rct() %>% 
       collect() %>% 
-      rhandsontable() %>% 
+      rhandsontable(height = 600) %>% 
+      hot_col("name", readOnly = TRUE) %>%  # can make primary key read only to avoid wrecking
       renderRHandsontable()
   })
+  
+  # input$hot_editTable isn't great since it tries to update every time we change the view filter
+  # so, added a Save button
+  observeEvent(input$hot_edit_write, {
+    edits <- input$hot_editTable %>% hot_to_r()
+    # can we grab only the displayed things? or what even is happening here?
+    print(edits %>% as_tibble())
+    write_con <- make_connection()
+    edits_tbl <- dbplyr::copy_inline(write_con, edits)
+    rows_update(
+      tbl(write_con, "data"), 
+      edits_tbl, 
+      unmatched = "ignore", in_place = TRUE
+    )
+    DBI::dbDisconnect(write_con)
+  })
+  
+  # just re-rendering the table when undo since underlying data does not change until saved
+  observeEvent(input$hot_edit_undo, {
+    output$hot_editTable <- hot_edit_rct() %>% 
+      collect() %>% 
+      rhandsontable(height = 600) %>% 
+      hot_col("name", readOnly = TRUE) %>% 
+      renderRHandsontable()
+  })
+  
+  
   
   # end of server function
 }
@@ -345,7 +315,12 @@ server <- function(input, output, session) {
 # shinyApp(ui = ui, server = server, options = list(host = "0.0.0.0", port = 8787))
 
 # for deployment
-shinyApp(ui = ui, server = server)
+# tried to do bookmarking but still no dice
+# why is hot_edit_rct() not saving?
+# nor are the filter selections
+shinyApp(
+  ui = ui, server = server, enableBookmarking = "server"
+)
 
 
 
