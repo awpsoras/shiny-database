@@ -179,8 +179,10 @@ server <- function(input, output, session) {
   
   # will be reactive since we have edits and can overwrite it with the uploaded csv
   # in reality this won't exist and will be initialized by the upload button only
-  to_add_rct <- tibble(name = "Bill", height = 2001, mass = 600, birth_year = 23, species = "Hillbilly") %>%
-    reactiveVal()
+  # to_add_rct <- tibble(name = "Bill", height = 2001, mass = 600, birth_year = 23, species = "Hillbilly") %>%
+  #   reactiveVal()
+  
+  to_add_rct <- reactiveVal()
   
   # remember input$add has has name, size, type, and datapath
   # begins as NULL (not empty string like input boxes)

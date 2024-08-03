@@ -24,6 +24,14 @@ refreshDB <- function() {
     ) %>% 
     select(!c(year, month, day, birthday))
   
+  
+  # here we are going to try to actually use real sample data
+  data <- tibble(
+    
+  )
+  
+  
+  
   RSQLite::dbListTables(con)
   copy_to(con, data, temporary = FALSE, overwrite = TRUE)
   
