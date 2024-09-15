@@ -61,11 +61,6 @@ hot_edit_pan <- tabPanel(
     column(4, selectInput('hot_editFilter', 'Select Filter Col', choices = '')),
     column(4, selectInput('hot_editValue', 'Select Filter Val(s)', choices = '', multiple = TRUE))
   ),
-  # fluidRow(
-  #   selectInput('hot_editSelect', 'Select Cols', choices = '', multiple = TRUE),
-  #   selectInput('hot_editFilter', 'Select Filter Col', choices = ''),
-  #   selectInput('hot_editValue', 'Select Filter Val(s)', choices = '', multiple = TRUE)
-  # ),
   hr(),
   actionButton("hot_edit_write", label = "Save", icon = NULL),
   actionButton("hot_edit_undo", label = "Undo", icon = NULL),
@@ -114,9 +109,6 @@ server <- function(input, output, session) {
   
   observeEvent(input$refresh, refreshDB())
   
-  # I am going to try to convert it to duckdb and see if that makes it go away
-  # nope it doesn't lol
-  # I am going to assume it does not matter
   # make_connection <- function() { DBI::dbConnect(RSQLite::SQLite(), here("data", "testdb.sqlite")) }
   
   # make_connection <- function() { duckdb::dbConnect(duckdb::duckdb(), here("data", "test_duckdb")) }
@@ -126,9 +118,7 @@ server <- function(input, output, session) {
   con <- make_connection()
   
   # this error happens whenever I click stop - it only goes away when I don't connect at all
-  # which obviously is not an option
   # Error: invoke_wrapped: throwing std::runtime_error
-  # this didn't help
   # this error actually seems to be related to the viewer pane in RStudio
   # The error occurs when hitting "Stop" when the app is running in the viewer pane,
   # but does not occur when the app runs in a new window or external. Pretty weird.
@@ -141,7 +131,7 @@ server <- function(input, output, session) {
   data_tbl_rct <- tbl(con, "data") %>% reactiveVal()
   
   # view section -------------------------------------------------------------------------------------------------------------
-  view_rct <- reactiveVal()
+
   
   # somehow the observes being separate makes it better
   observe(label = "View Columns", updateSelectInput(
@@ -156,24 +146,49 @@ server <- function(input, output, session) {
     else data_tbl_rct() %>% pull(input$viewFilter) %>% unique %>% sort
   ))
   
+  # initialize with just default data
+  view_rct <- reactiveVal()
+  data_tbl_rct |> view_rct()
+  
   # update view_rct based on current selection from data_tbl_rct()
   # only render the table once we have some select params (which should be within microseconds)
-  observe(label = "Show View Table", { if (!is.null(input$viewSelect)) {
-      data_tbl_rct() %>% 
-        select(input$viewSelect) %>% {
-          if (is.null(input$viewValue) | any(input$viewValue == "")) . 
-          else filter(., !!sym(input$viewFilter) %in% input$viewValue )
-        } %>% view_rct()
-      
-      output$viewTable <- renderDT(
-        datatable(
-          view_rct() %>% collect(), 
-          rownames = FALSE, selection = 'none', editable = FALSE, options = list(dom = 'tpli'),
-          filter = "top"
-        )
-      ) 
-    }
+  # this doesn't quite update when we change the base data for some reason
+  # maybe we need to update based on data_tbl_rct?
+  # observe(label = "Show View Table", { if (!is.null(input$viewSelect)) {
+  #     data_tbl_rct() %>% 
+  #       select(input$viewSelect) %>% {
+  #         if (is.null(input$viewValue) | any(input$viewValue == "")) . 
+  #         else filter(., !!sym(input$viewFilter) %in% input$viewValue )
+  #       } %>% view_rct()
+  #     
+  #     output$viewTable <- renderDT(
+  #       datatable(
+  #         view_rct() %>% collect(), 
+  #         rownames = FALSE, selection = 'none', editable = FALSE, options = list(dom = 'tpli'),
+  #         filter = "top"
+  #       )
+  #     ) 
+  #   }
+  # })
+  
+  observeEvent(data_tbl_rct(), label = "Show View Table", {
+    data_tbl_rct() %>% 
+      select(input$viewSelect) %>% {
+        if (is.null(input$viewValue) | any(input$viewValue == "")) . 
+        else filter(., !!sym(input$viewFilter) %in% input$viewValue )
+      } %>% view_rct()
+    
+    output$viewTable <- renderDT(
+      datatable(
+        view_rct() %>% collect(), 
+        rownames = FALSE, selection = 'none', editable = FALSE, options = list(dom = 'tpli'),
+        filter = "top"
+      )
+    ) 
   })
+  
+  
+  
   
   # add section -------------------------------------------------------------------------------------------------------------
   
@@ -184,42 +199,48 @@ server <- function(input, output, session) {
   
   to_add_rct <- reactiveVal()
   
-  # remember input$add has has name, size, type, and datapath
-  # begins as NULL (not empty string like input boxes)
-  observe(label = "Update to_add from csv", {
-    if (!is.null(input$add)) {
-      input$add$datapath %>% read_csv %>% to_add_rct()
-    }
+  
+  observeEvent(input$add, label = "Update to_add from csv", {
+    input$add$datapath %>% read_csv %>% to_add_rct()
+  })
+  
+  # render the uploaded table
+  observeEvent(to_add_rct(), {
+    output$uploaded <- to_add_rct() %>% rhandsontable() %>% renderRHandsontable()
   })
   
   # updating the to_add data based on edit actions (Ctrl + Enter)
+  # also updating the "simulated" add data
   observeEvent(label = "Update to_add from cell edit", input$uploaded, {
     input$uploaded %>% hot_to_r() %>% to_add_rct()
-  })
-  
-  output$uploaded <- to_add_rct() %>% rhandsontable() %>% renderRHandsontable()
-  
-  # combining sample of existing data then
-  # making a hidden marker column to bold the new stuff
-  output$submitted <- renderDT(
-    data_tbl_rct() %>% 
-      head %>% 
-      collect %>% 
-      bind_rows(to_add_rct() %>% mutate(added = TRUE) %>% relocate(added), .) %>% 
-      datatable(
-        ., 
-        editable = FALSE, rownames = FALSE, selection = 'none',
-        options = list(
-          dom = "tlp",
-          rowCallback = JS(
-            "function(row, data) {",
-            "  if (data[0]) { $(row).css('font-weight', 'bold') };",
-            "}"
-          ),
-          columnDefs = list(list(visible = FALSE, targets = 0))
+    
+    # combining sample of existing data then
+    # making a hidden marker column to bold the new stuff
+    output$submitted <- renderDT(
+      data_tbl_rct() %>% 
+        head %>% 
+        collect %>% 
+        bind_rows(
+          to_add_rct() %>% 
+            mutate(added = TRUE) %>% 
+            relocate(added), 
+          . # stacking, wish there was an insert function
+        ) %>% 
+        datatable(
+          ., 
+          editable = FALSE, rownames = FALSE, selection = 'none',
+          options = list(
+            dom = "tlp",
+            rowCallback = JS(
+              "function(row, data) {",
+              "  if (data[0]) { $(row).css('font-weight', 'bold') };",
+              "}"
+            ),
+            columnDefs = list(list(visible = FALSE, targets = 0))
+          )
         )
-      )
-  )
+    )
+  })
 
   output$result <- renderText('Not submitted yet.')
   # copy_inline makes it only generate one temp table (the one with the new row(s))
@@ -233,16 +254,43 @@ server <- function(input, output, session) {
     # but edit_rct is based on the data_tbl, so I guess we still do? Idk it's crazy
     
     data_tbl_rct() %>% rows_insert(to_add_tbl, conflict = "ignore") %>% compute %>% data_tbl_rct()
-    output$submitResult <- if (input$submitAdd == 1) "Data added!" %>% renderText()
-    else paste0("Data added! (x", input$submitAdd, "!)" ) %>% renderText()
+    output$submitResult <- 
+      if (input$submitAdd == 1) "Data added!" %>% renderText()
+      else paste0("Data added! (x", input$submitAdd, "!)" ) %>% renderText()
   })
   
   # this will actually modify the data (not the temp table)
   observeEvent(label = "Commit add to main table", input$commitAdd, {
     writeCon <- make_connection()
     mainData <- tbl(writeCon, "data")
-    rows_insert(mainData, to_add_rct(), conflict = "ignore", copy = TRUE, in_place = TRUE)
+    
+    rows_insert(mainData, to_add_rct(), conflict = "error", copy = TRUE, in_place = TRUE)
+    # addResult <- tryCatch({
+    #   rows_insert(mainData, to_add_rct(), conflict = "error", copy = TRUE, in_place = TRUE) |> 
+    #     paste0(nrow(.), "rows committed!")
+    # }, warning = function(w) {
+    #   paste0("Warning:", conditionMessage(w))
+    # }, error = function(e) {
+    #   paste0("Error:", conditionMessage(e))
+    # })
+    # 
+    # print("Add result")
+    # print(addResult)
+    
+    
     DBI::dbDisconnect(writeCon)
+    
+    # output$commitResult <- 
+    #   if (input$submitAdd == 1) "Data added!" %>% renderText()
+    #   else paste0("Data committed! (x", input$submitAdd, "!)" ) %>% renderText()
+    
+    # output$commitResult <- addResult |> renderText()
+    
+    # How to reset add data??
+    # also tried this
+    # rm doesn't work, nor does setting the input$add to null
+    unlink(input$add)
+    # NULL |> to_add_rct()
   })
   
   
@@ -277,13 +325,14 @@ server <- function(input, output, session) {
     # why does this have to be in an observe block?
     output$hot_editTable <- hot_edit_rct() %>% 
       collect() %>% 
-      rhandsontable(height = 600) %>% 
+      rhandsontable(height = 500) %>% 
       hot_col("name", readOnly = TRUE) %>%  # can make primary key read only to avoid wrecking
       renderRHandsontable()
   })
   
   # input$hot_editTable isn't great since it tries to update every time we change the view filter
-  # so, added a Save button
+  # I guess we should just update the data rct here?
+  # this way the view pane should update when we save edits
   observeEvent(input$hot_edit_write, {
     edits <- input$hot_editTable %>% hot_to_r()
     # can we grab only the displayed things? or what even is happening here?
@@ -296,13 +345,15 @@ server <- function(input, output, session) {
       unmatched = "ignore", in_place = TRUE
     )
     DBI::dbDisconnect(write_con)
+    
+    tbl(con, "data") %>% data_tbl_rct()
   })
   
   # just re-rendering the table when undo since underlying data does not change until saved
   observeEvent(input$hot_edit_undo, {
     output$hot_editTable <- hot_edit_rct() %>% 
       collect() %>% 
-      rhandsontable(height = 600) %>% 
+      rhandsontable(height = 500) %>% 
       hot_col("name", readOnly = TRUE) %>% 
       renderRHandsontable()
   })
@@ -317,9 +368,6 @@ server <- function(input, output, session) {
 # shinyApp(ui = ui, server = server, options = list(host = "0.0.0.0", port = 8787))
 
 # for deployment
-# tried to do bookmarking but still no dice
-# why is hot_edit_rct() not saving?
-# nor are the filter selections
 shinyApp(
   ui = ui, server = server, enableBookmarking = "server"
 )
