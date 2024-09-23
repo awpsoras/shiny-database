@@ -11,7 +11,7 @@ viewPan <- function(id) {
       column(4, selectInput(NS(id, 'value'), 'Select Filter Val(s)', choices = '', multiple = TRUE))
     ),
     hr(),
-    DTOutput('table')
+    DTOutput(NS(id, 'table'))
   )
 }
 
@@ -44,7 +44,7 @@ editPan <- function(id) {
     title = "HOT Edit some data",
     p("This section is for targeted editing of specific cells - if you don't have a .csv file and just want to edit a row or two, this is your best bet."),
     hr(),
-    bookmarkButton(),
+    # bookmarkButton(),
     fluidRow(
       column(4,selectInput(NS(id, 'select'), 'Select Cols', choices = '', multiple = TRUE)),
       column(4, selectInput(NS(id, 'filter'), 'Select Filter Col', choices = '')),
@@ -65,13 +65,21 @@ utilsPan <- function(id) {
   )
 }
 
-ui <- function() {fluidPage(
-  titlePanel("Testing..."), 
-  tabsetPanel(
-    viewPan('disp'),
-    addPan('add'),
-    editPan('edit'),
-    utilsPan('util')
-  )
+ui <- function() {
+  library(shiny)
+  library(DT)
+  library(tidyverse)
+  library(here)
+  library(rhandsontable) # 7/31/24, testing to see if edit functionality is better
+  source(here("createdb.R"))
+  
+  fluidPage(
+    titlePanel("Testing..."), 
+    tabsetPanel(
+      viewPan('disp'),
+      addPan('add'),
+      editPan('edit'),
+      utilsPan('util')
+    )
 )}
 

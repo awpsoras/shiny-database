@@ -16,27 +16,36 @@ viewServer <- function(id, data_tbl_rct) {
     
     # initialize with just default data
     view_rct <- reactiveVal()
-    data_tbl_rct |> view_rct()
-    
-    observeEvent(view_rct(), {
-      data_tbl_rct() %>% 
+
+    # still doing the null col thing if we do observeEvent
+    # I honestly don't understand why
+    # also still not keeping up with edits
+    # maybe since the tbl doesn't change
+    # it techincally doesn't update?
+    # but the view things do update correctly
+    # maybe if we handle null select and then do update
+    # based on data_tbl_rct()?
+    observe({
+      data_tbl_rct() %>%
         select(input$select) %>% {
-          if (is.null(input$select) | any(input$value == "")) . 
+          if (is.null(input$value) | any(input$value == "")) .
           else filter(., !!sym(input$filter) %in% input$value )
         } %>% view_rct()
-      
-      output$table <- renderDT(
+    })
+    
+    observeEvent(view_rct(), {
+      output$table <- view_rct() %>% 
+        collect() %>% 
         datatable(
-          view_rct() %>% collect(), 
           rownames = FALSE, selection = 'none', editable = FALSE, options = list(dom = 'tpli'),
           filter = "top"
-        )
-      ) 
+        ) %>% 
+        renderDT()
     })
   })
 }
 
-addServer <- function(id, data_tbl_rct) {
+addServer <- function(id, data_tbl_rct, con) {
   moduleServer(id, function(input, output, session) {
     to_add_rct <- reactiveVal()
     observeEvent(input$add, {
@@ -91,12 +100,9 @@ addServer <- function(id, data_tbl_rct) {
     
     # this will actually modify the data (not the temp table)
     observeEvent(input$commit, {
-      writeCon <- make_connection()
-      mainData <- tbl(writeCon, "data")
-      
+      mainData <- tbl(con, "data")
       rows_insert(mainData, to_add_rct(), conflict = "error", copy = TRUE, in_place = TRUE)
-      DBI::dbDisconnect(writeCon)
-      
+
       output$commitResult <- 
         if (input$commitResult == 1) "Committed!" %>% renderText()
         else paste0("Can't commit more than once (I think)")
@@ -106,7 +112,7 @@ addServer <- function(id, data_tbl_rct) {
   })
 }
 
-editServer <- function(id, data_tbl_rct) {
+editServer <- function(id, data_tbl_rct, con) {
   moduleServer(id, function(input, output, session) {
     hot_edit_rct <- reactiveVal()
     
@@ -124,8 +130,7 @@ editServer <- function(id, data_tbl_rct) {
     ))
     
     # update edit_rct based on current selection from data_tbl_rct()
-    # for some reason the whole factors -> dropdown thing isn't working
-    # idk why
+    # for some reason the whole factors -> dropdown thing isn't working, idk why
     observe({
       {if (!is.null(input$select)) {
         data_tbl_rct() %>% 
@@ -147,15 +152,15 @@ editServer <- function(id, data_tbl_rct) {
       edits <- input$table %>% hot_to_r()
       # can we grab only the displayed things? or what even is happening here?
       print(edits %>% as_tibble())
-      write_con <- make_connection()
-      edits_tbl <- dbplyr::copy_inline(write_con, edits)
+      edits_tbl <- dbplyr::copy_inline(con, edits)
       rows_update(
-        tbl(write_con, "data"), 
+        tbl(con, "data"), 
         edits_tbl, 
         unmatched = "ignore", in_place = TRUE
       )
-      DBI::dbDisconnect(write_con)
       
+      # refresh reactive data to update view table
+      # this should work
       tbl(con, "data") %>% data_tbl_rct()
     })
     
@@ -180,28 +185,23 @@ server <- function(input, output, session) {
   
   # so these functions don't appear for some reason
   # and aren't visible inside the modules
-  make_connection <- function() DBI::dbConnect(RSQLite::SQLite(), here("data", "testdb.sqlite"))
-  close_connection <- function(con) DBI::dbDisconnect(con)
-  
-  con <- make_connection()
+  con <- DBI::dbConnect(RSQLite::SQLite(), here("data", "testdb.sqlite"))
   
   # can the server functions see this?
-  # but the question is, are they getting the reference
-  # or the value? I honestly don't know
+  # but the question is, are they getting the reference or the value?
   data_tbl_rct <- tbl(con, "data") %>% reactiveVal()
   
-  # currently doesn't display anything
-  # maybe we should just pass it the connetion instead? idk
+  # maybe we should just pass it the connection instead?
+  # view still not keeping in sync with edits
+  # needs to be interacted with to re-render
   viewServer('disp', data_tbl_rct)
-  addServer('add', data_tbl_rct)
-  
-  # currently does display stuff
-  editServer('edit', data_tbl_rct)
+  addServer('add', data_tbl_rct, con)
+  editServer('edit', data_tbl_rct, con)
   
   utilsServer('util')
   
   onStop(function() {
+    DBI::dbDisconnect(con)
     cat("Closing connection...\n")
-    close_connection(con)
   })
 }
